@@ -1,0 +1,21 @@
+2025-11-27 22:35:13,496 - __main__ - INFO - Starting Occupancy Meter System
+2025-11-27 22:35:13,508 - __main__ - INFO - Connected to MQTT broker at localhost:1883
+2025-11-27 22:35:13,729 - __main__ - ERROR - Failed to open video source: 0
+2025-11-27 22:35:14,513 - __main__ - INFO - Disconnected from MQTT broker
+2025-11-27 22:35:20,131 - __main__ - INFO - Starting Occupancy Meter System
+2025-11-27 22:35:20,132 - __main__ - INFO - Connected to MQTT broker at localhost:1883
+2025-11-27 22:35:21,168 - __main__ - INFO - Video source opened: 0
+2025-11-27 22:35:25,142 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 0.98, Detection Time: 29.2ms
+2025-11-27 22:35:30,143 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 0.99, Detection Time: 29.3ms
+2025-11-27 22:35:35,176 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 30.6ms
+2025-11-27 22:35:40,180 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 32.9ms
+2025-11-27 22:35:45,241 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 29.3ms
+2025-11-27 22:35:50,247 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 30.3ms
+2025-11-27 22:35:55,248 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 32.1ms
+2025-11-27 22:36:00,312 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 29.0ms
+2025-11-27 22:36:05,314 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 29.9ms
+2025-11-27 22:36:10,348 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 31.4ms
+2025-11-27 22:36:15,351 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 31.3ms
+2025-11-27 22:36:20,411 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 31.2ms
+2025-11-27 22:36:25,488 - __main__ - INFO - Occupancy - Current: 1, Average (60s): 1.00, Detection Time: 30.7ms
+2025-11-27 22:36:26,129 - __main__ - INFO - Received interrupt signal. Shutting down...

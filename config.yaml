@@ -1,0 +1,34 @@
+# Occupancy Meter System Configuration
+
+# Room Configuration
+room:
+  identifier: "room1"
+  building: "building"
+
+# MQTT Configuration
+mqtt:
+  broker_host: "localhost"
+  broker_port: 1883
+  topic_prefix: "building/room1"
+  qos: 1
+  keepalive: 60
+  username: null  # Set if authentication required
+  password: null  # Set if authentication required
+
+# Detection Configuration
+detection:
+  model_path: "yolov8n.pt"  # YOLOv8 nano model (lightweight)
+  confidence_threshold: 0.5
+  device: "cpu"  # "cpu" or "cuda" for GPU
+  input_source: 0  # Camera index or video file path
+
+# Average Calculation
+averaging:
+  time_window_seconds: 60  # Time window for average calculation
+  update_interval_seconds: 5  # How often to publish updates
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "occupancy_meter.log"
+
