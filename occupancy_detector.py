@@ -4,15 +4,16 @@ Uses YOLO for person detection and MQTT for data publishing
 """
 
 import cv2
+import os
 import time
 import logging
 import yaml
-from collections import deque
 from datetime import datetime
 from typing import Optional
 from ultralytics import YOLO
 import paho.mqtt.client as mqtt
 import json
+import torch
 
 
 class OccupancyDetector:
@@ -27,11 +28,34 @@ class OccupancyDetector:
             confidence_threshold: Minimum confidence for person detection
             device: Device to run inference on ("cpu" or "cuda")
         """
+        self.logger = logging.getLogger(__name__)
         self.model = YOLO(model_path)
         self.confidence_threshold = confidence_threshold
-        self.device = device
+        self.device = self._resolve_device(device)
         self.current_count = 0
-        self.logger = logging.getLogger(__name__)
+        
+    def _resolve_device(self, requested_device: str) -> str:
+        """Choose a safe inference device; fallback to CPU if CUDA is unavailable."""
+        normalized = str(requested_device).strip().lower()
+        if normalized == "cpu":
+            return "cpu"
+
+        wants_cuda = normalized.startswith("cuda") or normalized.isdigit()
+        if wants_cuda:
+            try:
+                if torch.cuda.is_available():
+                    # Ultralytics accepts "0" as default GPU device.
+                    return "0"
+            except Exception:
+                pass
+            self.logger.warning(
+                f"Requested device '{requested_device}' but CUDA is unavailable. "
+                "Falling back to CPU."
+            )
+            return "cpu"
+
+        # Unknown value: keep as-is, Ultralytics may still handle it.
+        return requested_device
         
     def detect_people(self, frame) -> int:
         """
@@ -154,17 +178,6 @@ class MQTTClient:
         })
         return self._publish(topic, payload)
     
-    def publish_average_occupancy(self, average: float, time_window: int):
-        """Publish average occupancy over time window"""
-        topic = f"{self.topic_prefix}/occupancy/average"
-        payload = json.dumps({
-            "average": round(average, 2),
-            "time_window_seconds": time_window,
-            "timestamp": datetime.now().isoformat(),
-            "room": self.topic_prefix.split("/")[-1] if "/" in self.topic_prefix else "unknown"
-        })
-        return self._publish(topic, payload)
-    
     def _publish(self, topic: str, payload: str) -> bool:
         """Internal method to publish message"""
         if not self.connected:
@@ -223,9 +236,7 @@ class OccupancyMeter:
             password=mqtt_config.get('password')
         )
         
-        # Occupancy tracking
-        self.occupancy_history = deque(maxlen=1000)  # Store occupancy readings with timestamps
-        self.time_window = self.config['averaging']['time_window_seconds']
+        # Publish throttling (from config averaging section)
         self.update_interval = self.config['averaging']['update_interval_seconds']
         
         # Performance metrics
@@ -260,25 +271,6 @@ class OccupancyMeter:
         root_logger.addHandler(file_handler)
         root_logger.addHandler(console_handler)
     
-    def _calculate_average_occupancy(self) -> float:
-        """Calculate average occupancy over the configured time window"""
-        if not self.occupancy_history:
-            return 0.0
-        
-        current_time = time.time()
-        cutoff_time = current_time - self.time_window
-        
-        # Filter readings within time window
-        recent_readings = [
-            count for timestamp, count in self.occupancy_history
-            if timestamp >= cutoff_time
-        ]
-        
-        if not recent_readings:
-            return 0.0
-        
-        return sum(recent_readings) / len(recent_readings)
-    
     def _log_performance_metrics(self):
         """Log system performance metrics"""
         uptime = time.time() - self.start_time
@@ -304,24 +296,68 @@ class OccupancyMeter:
             return
         
         # Open video source
-        input_source = self.config['detection']['input_source']
+        det_cfg = self.config['detection']
+        input_source = det_cfg['input_source']
+        loop_file = det_cfg.get('loop_file', True)
+        playback_realtime = det_cfg.get('playback_realtime', False)
+
         if isinstance(input_source, int):
             cap = cv2.VideoCapture(input_source)
+            is_file_source = False
         else:
             cap = cv2.VideoCapture(input_source)
-        
+            path = os.path.expanduser(str(input_source))
+            is_file_source = os.path.isfile(path)
+
         if not cap.isOpened():
             self.logger.error(f"Failed to open video source: {input_source}")
             self.mqtt_client.disconnect()
             return
         
         self.logger.info(f"Video source opened: {input_source}")
+        file_fps = 0.0
+        if is_file_source:
+            nframes = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            file_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+            if nframes > 0 and file_fps > 0:
+                playback_sec = nframes / file_fps
+                self.logger.info(
+                    f"Video file: {nframes} frames @ {file_fps:.1f} fps "
+                    f"(~{playback_sec:.1f}s if played at native speed)"
+                )
+            else:
+                self.logger.info(
+                    f"Video file: {nframes} frames, container FPS={file_fps} "
+                    "(metadata may be incomplete)"
+                )
+            if not playback_realtime:
+                self.logger.info(
+                    "Processing runs as fast as the detector allows, not at video clock speed — "
+                    "EOF arrives much sooner than the native playback length above. "
+                    "Set detection.playback_realtime: true to pace at the file's FPS."
+                )
+            self.logger.info(f"loop_file={loop_file}, playback_realtime={playback_realtime}")
         self.running = True
         
         try:
             while self.running:
+                frame_t0 = time.time()
                 ret, frame = cap.read()
                 if not ret:
+                    if is_file_source:
+                        if loop_file:
+                            self.logger.info("End of video file — rewinding to start")
+                            if not cap.set(cv2.CAP_PROP_POS_FRAMES, 0):
+                                cap.release()
+                                cap = cv2.VideoCapture(input_source)
+                                if not cap.isOpened():
+                                    self.logger.error("Could not reopen video after EOF")
+                                    break
+                            continue
+                        self.logger.info(
+                            "End of video file — exiting (set detection.loop_file: true to repeat)"
+                        )
+                        break
                     self.logger.warning("Failed to read frame. Retrying...")
                     time.sleep(0.1)
                     continue
@@ -331,25 +367,16 @@ class OccupancyMeter:
                 count = self.detector.detect_people(frame)
                 detection_time = time.time() - start_detection
                 
-                # Store occupancy reading
                 current_time = time.time()
-                self.occupancy_history.append((current_time, count))
                 self.frame_count += 1
                 
-                # Publish current occupancy (every frame, but throttled by update_interval)
+                # Publish current occupancy (throttled by update_interval)
                 if current_time - self.last_publish_time >= self.update_interval:
-                    # Publish current occupancy
                     self.mqtt_client.publish_current_occupancy(count)
-                    
-                    # Calculate and publish average occupancy
-                    avg_occupancy = self._calculate_average_occupancy()
-                    self.mqtt_client.publish_average_occupancy(avg_occupancy, self.time_window)
-                    
                     self.last_publish_time = current_time
                     
                     self.logger.info(
                         f"Occupancy - Current: {count}, "
-                        f"Average ({self.time_window}s): {avg_occupancy:.2f}, "
                         f"Detection Time: {detection_time*1000:.1f}ms"
                     )
                     
@@ -361,8 +388,14 @@ class OccupancyMeter:
                 if detection_time > 5.0:
                     self.logger.warning(f"Detection latency exceeds 5 seconds: {detection_time:.2f}s")
                 
-                # Small delay to prevent excessive CPU usage
-                time.sleep(0.01)
+                if is_file_source and playback_realtime and file_fps > 0:
+                    frame_budget = 1.0 / file_fps
+                    elapsed = time.time() - frame_t0
+                    delay = frame_budget - elapsed
+                    if delay > 0:
+                        time.sleep(delay)
+                else:
+                    time.sleep(0.01)
                 
         except KeyboardInterrupt:
             self.logger.info("Received interrupt signal. Shutting down...")
