@@ -12,7 +12,7 @@ from datetime import datetime
 class OccupancyTestClient:
     """Test client to subscribe and display occupancy data"""
     
-    def __init__(self, broker_host: str = "localhost", broker_port: int = 1883,
+    def __init__(self, broker_host: str = "10.1.68.89", broker_port: int = 1883,
                  topic_prefix: str = "building/room1", username: str = None,
                  password: str = None):
         """
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='MQTT Test Client for Occupancy Meter')
-    parser.add_argument('--host', default='localhost', help='MQTT broker hostname')
+    parser.add_argument('--host', default='0.0.0.0', help='MQTT broker hostname')
     parser.add_argument('--port', type=int, default=1883, help='MQTT broker port')
     parser.add_argument('--topic', default='building/room1', help='Topic prefix')
     parser.add_argument('--username', default=None, help='MQTT username')
